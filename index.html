@@ -1,64 +1,660 @@
-// This is the code for our "serverless mailroom."
-// It runs securely on a server, not in the student's browser.
-
-// The 'fetch' function is needed to make network requests.
-const fetch = require('node-fetch');
-
-exports.handler = async function(event, context) {
-    // This function runs every time a student makes a request from the app.
-
-    // 1. Get the student's conversation history from the request.
-    const { conversationHistory, prompt } = JSON.parse(event.body);
-
-    // 2. Access YOUR secret API key.
-    // This is stored securely in Netlify's settings, not in the code.
-    const apiKey = process.env.GOOGLE_API_KEY;
-
-    if (!apiKey) {
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: 'API key is not configured.' })
-        };
-    }
-
-    // 3. Prepare the request to send to the Google AI.
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-    
-    const requestBody = {
-        contents: [...conversationHistory, { role: 'user', parts: [{ text: prompt }] }]
-    };
-
-    try {
-        // 4. Send the request to Google's AI on the student's behalf.
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (!response.ok) {
-            // If Google's API returns an error, pass it along.
-            const errorBody = await response.json();
-            console.error('Google AI API Error:', errorBody);
-            return {
-                statusCode: response.status,
-                body: JSON.stringify({ error: 'An error occurred with the AI service.', details: errorBody })
-            };
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRF Synthesizer & Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .btn {
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+        .btn-secondary {
+            background-color: #6b7280;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        .upload-box {
+            border: 2px dashed #d1d5db;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s, background-color 0.3s;
+            position: relative;
+        }
+        .upload-box:hover, .upload-box.drag-over {
+            border-color: #4f46e5;
+            background-color: #f0f2ff;
+        }
+        .upload-box.filled {
+             border-color: #10b981;
+             background-color: #f0fdf4;
+        }
+        .clear-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background-color: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 1.75rem;
+            height: 1.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            font-size: 1.25rem;
+        }
+        .clear-btn:hover {
+            background-color: #dc2626;
+        }
+        .expand-btn {
+            position: absolute;
+            top: 0.5rem;
+            left: 0.5rem;
+            background-color: #6b7280;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 1.75rem;
+            height: 1.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+        }
+        .expand-btn:hover {
+            opacity: 1;
+        }
+        .review-box-container {
+            position: relative;
+        }
+        .review-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            height: 450px;
+            transition: all 0.5s ease-in-out;
+        }
+        .review-grid.focused .review-box-container {
+            flex-grow: 0;
+            width: 50px; /* Shrink width */
+        }
+        .review-grid.focused .review-box-container.is-focused {
+            flex-grow: 1;
+            width: auto; /* Expand width */
+        }
+        .review-grid.focused {
+            display: flex;
         }
 
-        const data = await response.json();
+        .screen {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .hidden {
+            display: none;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: #fff;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .chat-message {
+            max-width: 80%;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            margin-bottom: 0.5rem;
+            white-space: pre-wrap;
+        }
+        .user-message {
+            background-color: #4f46e5;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .ai-message {
+            background-color: #e5e7eb;
+            color: #1f2937;
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4 md:p-8">
 
-        // 5. Return the AI's successful response back to the student's browser.
-        return {
-            statusCode: 200,
-            body: JSON.stringify(data)
-        };
+    <div id="app" class="w-full max-w-7xl mx-auto">
+        
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen text-center max-w-2xl mx-auto">
+             <div class="card p-8 md:p-12">
+                <h1 class="text-4xl font-bold">Personal Reality Framework (PRF) Synthesizer</h1>
+                <p class="text-gray-600 mt-4 mb-8">The central hub for analyzing and integrating your personal insights.</p>
+                <div class="flex flex-col sm:flex-row justify-center gap-4">
+                    <button id="start-here-btn" class="btn btn-primary px-8 py-3 rounded-lg font-semibold text-lg">Start Here</button>
+                    <a href="https://rmertzman-tech.github.io/Nelson-Mandela/" target="_blank" class="btn btn-secondary px-8 py-3 rounded-lg font-semibold text-lg">View an Example</a>
+                </div>
+            </div>
+        </div>
 
-    } catch (error) {
-        console.error('Serverless function error:', error);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: 'An internal error occurred.' })
-        };
-    }
-};
+        <!-- Explanation Screen -->
+        <div id="explanation-screen" class="screen hidden text-left max-w-3xl mx-auto">
+            <div class="card p-8 md:p-12">
+                <h2 class="text-3xl font-bold text-center mb-6">Synthesize Your Framework</h2>
+                <p class="text-gray-700 mb-4">Welcome to the Synthesizer. This is where you bring together the insights you've gathered from all six explorer modules.</p>
+                
+                <div class="bg-indigo-50 border-l-4 border-indigo-500 text-indigo-800 p-4 rounded-md my-6">
+                    <h3 class="font-bold">How to Use This Tool (For Your Own Work):</h3>
+                    <ul class="list-disc list-inside mt-2 space-y-1">
+                        <li>Use the **"Load Data from Explorers"** button for a quick way to import your saved work.</li>
+                        <li>Alternatively, you can **drag-and-drop your .txt files** from each explorer into the upload boxes.</li>
+                        <li>The review boxes are editable. You can use the **expand icon** (⤢) for a focused view of your data.</li>
+                        <li>Use the **"Begin Guided Synthesis"** feature to have a step-by-step conversation with the AI Tutor to help you synthesize your framework.</li>
+                        <li>**Download your complete PRF** as a single file to save your work.</li>
+                    </ul>
+                </div>
+
+                <div class="bg-green-50 border-l-4 border-green-500 text-green-800 p-4 rounded-md my-6">
+                    <h3 class="font-bold">Using the Demo Case Studies</h3>
+                    <p class="mt-2">To see how the AI Tutor works with a completed example, you can load one of our demo case studies. The full "Demo Library" with many more examples is available on the main <a href="https://rmertzman-tech.github.io/PRF-PROJECT-HUB/" target="_blank" class="underline font-semibold">Project Hub Page</a>.</p>
+                    <p class="mt-2 font-semibold">Workflow to analyze a demo:</p>
+                    <ol class="list-decimal list-inside mt-1">
+                        <li>Visit a demo page from the Hub.</li>
+                        <li>Click the "Load this Demo into Synthesizer" button on that page.</li>
+                        <li>Return here and use the "Load Data from Explorers" button to import the demo data.</li>
+                    </ol>
+                </div>
+
+                <div class="text-center">
+                    <button id="continue-to-app-btn" class="btn btn-primary px-8 py-3 rounded-lg font-semibold text-lg">Continue to Synthesizer</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App Workspace -->
+        <div id="main-app" class="hidden">
+            <div class="text-left mb-6">
+                 <button id="back-to-start-btn" class="font-semibold text-indigo-600 hover:text-indigo-800">← Back to Start</button>
+            </div>
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <h1 id="main-title" class="text-4xl font-bold">Personal Reality Framework (PRF) Synthesizer</h1>
+                <p class="text-gray-600 mt-2">Import your saved summaries from the explorers to begin.</p>
+            </div>
+
+            <!-- Demo Status Banner -->
+            <div id="demo-status-banner" class="hidden card bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 text-center mb-6">
+                <p>You are currently viewing the interactive demo for: <strong id="demo-name-display"></strong>. Any edits or new file uploads will clear this demo.</p>
+            </div>
+
+            <!-- Main Workspace -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <!-- Left Column: File Uploads -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">1. Import Your Data</h2>
+                        <button id="load-data-btn" class="btn btn-primary w-full py-3 mb-4 rounded-lg font-semibold">Load Data from Explorers</button>
+                        <p class="text-center text-gray-500 text-sm mb-4">Or upload files manually below</p>
+                        <div class="space-y-4">
+                            <div id="beliefs-upload-box" class="upload-box"><button id="beliefs-clear-btn" class="clear-btn hidden">&times;</button><p class="font-semibold text-gray-700">Beliefs</p><input type="file" id="beliefs-file-input" class="hidden" accept=".txt"></div>
+                            <div id="rules-upload-box" class="upload-box"><button id="rules-clear-btn" class="clear-btn hidden">&times;</button><p class="font-semibold text-gray-700">Rules</p><input type="file" id="rules-file-input" class="hidden" accept=".txt"></div>
+                            <div id="ontology-upload-box" class="upload-box"><button id="ontology-clear-btn" class="clear-btn hidden">&times;</button><p class="font-semibold text-gray-700">Ontology</p><input type="file" id="ontology-file-input" class="hidden" accept=".txt"></div>
+                            <div id="authenticity-upload-box" class="upload-box"><button id="authenticity-clear-btn" class="clear-btn hidden">&times;</button><p class="font-semibold text-gray-700">Authenticity</p><input type="file" id="authenticity-file-input" class="hidden" accept=".txt"></div>
+                            <div id="assembly_history-upload-box" class="upload-box"><button id="assembly_history-clear-btn" class="clear-btn hidden">&times;</button><p class="font-semibold text-gray-700">Assembly History</p><input type="file" id="assembly_history-file-input" class="hidden" accept=".txt"></div>
+                            <div id="future_pull-upload-box" class="upload-box"><button id="future_pull-clear-btn" class="clear-btn hidden">&times;</button><p class="font-semibold text-gray-700">Future Pull</p><input type="file" id="future_pull-file-input" class="hidden" accept=".txt"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Synthesis & Analysis -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">2. Review & Edit Your Data</h2>
+                        <div id="review-grid" class="review-grid p-2 bg-gray-50 rounded-lg">
+                             <!-- Text areas will be dynamically created here -->
+                        </div>
+                    </div>
+                    <div class="card p-6">
+                        <h2 class="text-xl font-bold mb-4">3. Guided Synthesis</h2>
+                        
+                        <div id="chat-container" class="w-full h-96 flex flex-col border bg-white rounded-lg p-4">
+                            <div id="chat-history" class="flex-1 overflow-y-auto mb-4 flex flex-col">
+                                <!-- Chat messages will appear here -->
+                            </div>
+                            <div id="chat-input-area" class="flex items-center gap-2">
+                                <textarea id="chat-input" class="w-full border border-gray-300 rounded-lg p-2 resize-none" placeholder="Type your response..." rows="2" disabled></textarea>
+                                <button id="chat-send-btn" class="btn btn-primary px-6 py-2 rounded-lg font-semibold" disabled>Send</button>
+                            </div>
+                        </div>
+
+                        <div id="final-analysis-section" class="hidden mt-6">
+                             <button id="generate-analysis-btn" class="btn btn-primary w-full py-3 rounded-lg font-semibold flex items-center justify-center">
+                                <span id="analysis-btn-text">Generate Final AI Analysis</span>
+                                <div id="analysis-spinner" class="spinner hidden"></div>
+                            </button>
+                            <div id="final-analysis-display" class="hidden mt-4 w-full min-h-[100px] p-3 bg-gray-50 border rounded-lg whitespace-pre-wrap"></div>
+                        </div>
+                        
+                        <div class="mt-6 text-right">
+                            <button id="download-prf-btn" class="btn btn-primary px-8 py-3 rounded-lg font-semibold">Download Full PRF</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Screen Elements ---
+            const startScreen = document.getElementById('start-screen');
+            const explanationScreen = document.getElementById('explanation-screen');
+            const mainApp = document.getElementById('main-app');
+            const mainTitle = document.getElementById('main-title');
+            const demoStatusBanner = document.getElementById('demo-status-banner');
+            const demoNameDisplay = document.getElementById('demo-name-display');
+            
+            // --- Button Elements ---
+            const startHereBtn = document.getElementById('start-here-btn');
+            const continueToAppBtn = document.getElementById('continue-to-app-btn');
+            const backToStartBtn = document.getElementById('back-to-start-btn');
+            const loadDataBtn = document.getElementById('load-data-btn');
+            const generateAnalysisBtn = document.getElementById('generate-analysis-btn');
+
+
+            // --- Main App Elements ---
+            const reviewGrid = document.getElementById('review-grid');
+            const downloadPrfBtn = document.getElementById('download-prf-btn');
+            const finalAnalysisSection = document.getElementById('final-analysis-section');
+            const finalAnalysisDisplay = document.getElementById('final-analysis-display');
+            const analysisBtnText = document.getElementById('analysis-btn-text');
+            const analysisSpinner = document.getElementById('analysis-spinner');
+            
+            // --- Chat Elements ---
+            const chatHistory = document.getElementById('chat-history');
+            const chatInput = document.getElementById('chat-input');
+            const chatSendBtn = document.getElementById('chat-send-btn');
+
+            const DATA_KEYS = {
+                beliefs: 'prf_beliefs_data',
+                rules: 'prf_rules_data',
+                ontology: 'prf_ontology_data',
+                authenticity: 'prf_authenticity_data',
+                assembly_history: 'prf_assembly_history_data',
+                future_pull: 'prf_future_pull_data'
+            };
+
+            const CATEGORIES = Object.keys(DATA_KEYS);
+            const DEMO_NAME_KEY = 'prf_current_demo_name';
+
+            // --- Screen Navigation ---
+            startHereBtn.addEventListener('click', () => { startScreen.classList.add('hidden'); explanationScreen.classList.remove('hidden'); });
+            continueToAppBtn.addEventListener('click', () => { explanationScreen.classList.add('hidden'); mainApp.classList.remove('hidden'); mainApp.classList.add('screen'); });
+            backToStartBtn.addEventListener('click', () => { mainApp.classList.add('hidden'); startScreen.classList.remove('hidden'); });
+
+            function hideDemoBanner() {
+                demoStatusBanner.classList.add('hidden');
+            }
+
+            // --- Dynamic Creation of Review Boxes ---
+            CATEGORIES.forEach(key => {
+                const formattedName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const container = document.createElement('div');
+                container.className = 'review-box-container';
+                container.dataset.key = key;
+                const textarea = document.createElement('textarea');
+                textarea.id = `${key}-display`;
+                textarea.className = 'w-full h-full p-2 border rounded-md bg-white focus:ring-2 focus:ring-indigo-400 focus:outline-none';
+                textarea.placeholder = `${formattedName} data...`;
+                container.appendChild(textarea);
+                const expandBtn = document.createElement('button');
+                expandBtn.className = 'expand-btn';
+                expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrows-fullscreen" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/></svg>`;
+                expandBtn.title = `Focus on ${formattedName}`;
+                container.appendChild(expandBtn);
+                reviewGrid.appendChild(container);
+                expandBtn.addEventListener('click', () => {
+                    const isFocused = container.classList.contains('is-focused');
+                    reviewGrid.querySelectorAll('.review-box-container').forEach(c => c.classList.remove('is-focused'));
+                    if (isFocused) {
+                        reviewGrid.classList.remove('focused');
+                        expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrows-fullscreen" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/></svg>`;
+                        expandBtn.title = `Focus on ${formattedName}`;
+                    } else {
+                        reviewGrid.classList.add('focused');
+                        container.classList.add('is-focused');
+                        expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-fullscreen-exit" viewBox="0 0 16 16"><path d="M5.5 0a.5.5 0 0 1 .5.5v4A.5.5 0 0 1 5 5h-4a.5.5 0 0 1 0-1h3.5V.5a.5.5 0 0 1 .5-.5zM5 11h4a.5.5 0 0 1 0 1H5a.5.5 0 0 1 0-1zm11-5.5a.5.5 0 0 1-1 0V1.5H11.5a.5.5 0 0 1 0-1H15a.5.5 0 0 1 .5.5v4zM11 11h3.5a.5.5 0 0 1 0 1H11a.5.5 0 0 1 0-1z"/></svg>`;
+                        expandBtn.title = `Return to Grid View`;
+                    }
+                });
+                textarea.addEventListener('input', hideDemoBanner);
+            });
+
+            // --- File Handling Logic ---
+            CATEGORIES.forEach(key => {
+                const uploadBox = document.getElementById(`${key}-upload-box`);
+                const fileInput = document.getElementById(`${key}-file-input`);
+                const clearBtn = document.getElementById(`${key}-clear-btn`);
+                const display = document.getElementById(`${key}-display`);
+                const handleFile = (file) => {
+                    hideDemoBanner();
+                    if (file && file.type === 'text/plain') {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const newContent = e.target.result;
+                            display.value = display.value.trim().length > 0 ? `${display.value}\n\n----------\n(New File: ${file.name})\n----------\n\n${newContent}` : newContent;
+                            uploadBox.classList.add('filled');
+                            clearBtn.classList.remove('hidden');
+                        };
+                        reader.readAsText(file);
+                    } else { alert('Please upload a valid .txt file.'); }
+                };
+                uploadBox.addEventListener('click', (e) => { if (e.target !== clearBtn) fileInput.click(); });
+                fileInput.addEventListener('change', (event) => handleFile(event.target.files[0], key));
+                uploadBox.addEventListener('dragover', (event) => { event.preventDefault(); uploadBox.classList.add('drag-over'); });
+                uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('drag-over'));
+                uploadBox.addEventListener('drop', (event) => { event.preventDefault(); uploadBox.classList.remove('drag-over'); handleFile(event.dataTransfer.files[0], key); });
+                clearBtn.addEventListener('click', () => {
+                    hideDemoBanner();
+                    display.value = '';
+                    uploadBox.classList.remove('filled');
+                    clearBtn.classList.add('hidden');
+                    fileInput.value = ''; 
+                });
+            });
+            
+            // --- Load Data from LocalStorage ---
+            loadDataBtn.addEventListener('click', () => {
+                let loadedCount = 0;
+                const demoName = localStorage.getItem(DEMO_NAME_KEY);
+                if (demoName) {
+                    demoNameDisplay.textContent = demoName;
+                    demoStatusBanner.classList.remove('hidden');
+                    localStorage.removeItem(DEMO_NAME_KEY);
+                } else { hideDemoBanner(); }
+                CATEGORIES.forEach(key => {
+                    const savedData = localStorage.getItem(DATA_KEYS[key]);
+                    if (savedData) {
+                        const display = document.getElementById(`${key}-display`);
+                        display.value = savedData;
+                        document.getElementById(`${key}-upload-box`).classList.add('filled');
+                        document.getElementById(`${key}-clear-btn`).classList.remove('hidden');
+                        loadedCount++;
+                    }
+                });
+                if (loadedCount > 0) { alert(`${loadedCount} data source(s) loaded successfully.`); } 
+                else { alert('No saved data found from the explorer apps in this browser.'); }
+            });
+
+            // --- Guided Synthesis (Chat) Logic ---
+            let conversationHistory = [];
+            let currentStep = 0;
+            const synthesisSteps = [ 'start', 'beliefs', 'rules', 'ontology', 'authenticity', 'assembly_history', 'future_pull', 'end' ];
+
+            function addMessage(text, sender) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${sender}-message`;
+                messageDiv.textContent = text;
+                chatHistory.appendChild(messageDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+            
+            function constructPrompt(step, fullHistory) {
+                const currentModule = synthesisSteps[step];
+                const previousModule = synthesisSteps[step - 1];
+                let allData = '';
+                CATEGORIES.forEach(key => {
+                    const formattedName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    allData += `--- ${formattedName} ---\n${document.getElementById(`${key}-display`).value || 'No data provided.'}\n\n`;
+                });
+
+                if (step === 1) { // First step after introduction
+                    return `You are an insightful and supportive philosophy tutor specializing in a framework that analyzes personal reality through Beliefs, Rules, Ontology, Authenticity, Assembly History, and Future Pull. Your goal is to help a student synthesize these components through a step-by-step conversation.
+                    
+                    **Your Task:** Begin the conversation by asking an insightful, open-ended question about their **Beliefs**. Your question should encourage them to identify the core of their belief system based on the text they provided.
+                    
+                    Here is all of the student's data for your reference:\n${allData}`;
+                } else {
+                     return `You are an insightful and supportive philosophy tutor continuing a guided synthesis conversation with a student about their Personal Reality Framework (PRF).
+                    
+                    **Conversation History So Far:**
+                    ${fullHistory}
+                    
+                    **Your Task:** Your next step is to guide the student to connect their reflections on **${previousModule.replace(/_/g, ' ')}** with their reflections on **${currentModule.replace(/_/g, ' ')}**.
+                    
+                    Please generate a response that does the following:
+                    1.  **Acknowledge and Validate:** Briefly and positively acknowledge the student's previous response.
+                    2.  **Synthesize and Connect:** Analyze the student's full data, find an interesting connection or a potential tension between the '${previousModule}' and '${currentModule}' sections.
+                    3.  **Ask a Probing Question:** Formulate an insightful, open-ended question that encourages the student to explore this connection or tension. Your question should prompt critical thinking, not a simple yes/no answer.
+                    
+                    Keep your tone encouraging and conversational.
+                    
+                    Here is all of the student's data for your reference:\n${allData}`;
+                }
+            }
+            
+            async function getAiResponse() {
+                chatInput.disabled = true;
+                chatSendBtn.disabled = true;
+                const thinkingMsg = document.createElement('div');
+                thinkingMsg.className = 'chat-message ai-message';
+                thinkingMsg.innerHTML = '<div class="spinner"></div>';
+                chatHistory.appendChild(thinkingMsg);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+
+                const fullHistoryText = conversationHistory.map(msg => `[${msg.role === 'user' ? 'Student' : 'Tutor'}]: ${msg.parts[0].text}`).join('\n');
+                const prompt = constructPrompt(currentStep, fullHistoryText);
+                
+                // This will be the new URL for your serverless function
+                const apiUrl = '/.netlify/functions/ai-tutor';
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationHistory, prompt })
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API Error: ${response.status} - ${errorData.error}`);
+                    }
+                    const result = await response.json();
+                    if (!result.candidates || result.candidates.length === 0) {
+                         throw new Error("No response from AI. The content may have been blocked.");
+                    }
+                    const aiText = result.candidates[0].content.parts[0].text;
+                    
+                    thinkingMsg.remove();
+                    addMessage(aiText, 'ai');
+                    conversationHistory.push({role: 'model', parts: [{text: aiText}]});
+
+                } catch (error) {
+                     thinkingMsg.remove();
+                     addMessage(`An error occurred: ${error.message}. Please check your connection or contact the administrator.`, 'ai');
+                } finally {
+                    if (currentStep < synthesisSteps.length -1) {
+                        chatInput.disabled = false;
+                        chatSendBtn.disabled = false;
+                        chatInput.focus();
+                    } else {
+                        finalAnalysisSection.classList.remove('hidden');
+                        addMessage("You have now completed the guided synthesis. You can now generate a final AI analysis of your entire framework.", 'ai');
+                    }
+                }
+            }
+            
+            chatSendBtn.addEventListener('click', () => {
+                const userText = chatInput.value.trim();
+                if (!userText) return;
+                
+                addMessage(userText, 'user');
+                conversationHistory.push({role: 'user', parts: [{text: userText}]});
+                chatInput.value = '';
+                currentStep++;
+                getAiResponse();
+            });
+
+            function initializeChat() {
+                chatHistory.innerHTML = '';
+                conversationHistory = [];
+                currentStep = 0;
+                finalAnalysisSection.classList.add('hidden');
+                finalAnalysisDisplay.classList.add('hidden');
+                finalAnalysisDisplay.textContent = '';
+
+
+                const hasData = CATEGORIES.some(key => document.getElementById(`${key}-display`).value.trim() !== '');
+                if (hasData) {
+                    currentStep = 1; // Ready for first AI question
+                    getAiResponse();
+                } else {
+                    addMessage("Please load or upload some data from your explorers before we can begin.", 'ai');
+                }
+            }
+
+            const startChatBtn = document.createElement('button');
+            startChatBtn.textContent = 'Begin Guided Synthesis';
+            startChatBtn.className = 'btn btn-primary mx-auto';
+            chatHistory.appendChild(startChatBtn);
+            startChatBtn.addEventListener('click', () => {
+                initializeChat();
+            });
+
+            generateAnalysisBtn.addEventListener('click', async () => {
+                analysisBtnText.classList.add('hidden');
+                analysisSpinner.classList.remove('hidden');
+                generateAnalysisBtn.disabled = true;
+
+                let allData = '';
+                CATEGORIES.forEach(key => {
+                    const formattedName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    allData += `--- ${formattedName} ---\n${document.getElementById(`${key}-display`).value || 'No data provided.'}\n\n`;
+                });
+                
+                const fullHistoryText = conversationHistory.map(msg => `[${msg.role === 'user' ? 'Student' : 'Tutor'}]: ${msg.parts[0].text}`).join('\n');
+
+
+                const finalPrompt = `You are a philosophy tutor specializing in a framework that analyzes personal reality through Beliefs, Rules, Ontology, Authenticity, Assembly History, and Future Pull. You have just completed a guided synthesis conversation with a student.
+                
+                **Your Task:**
+                Write a final, comprehensive analysis of the student's Personal Reality Framework. Your analysis MUST be formatted in four distinct sections, with the titles in bold:
+                
+                1.  **Key Themes:** Identify and describe 2-3 of the most important recurring ideas that connect the different parts of their framework.
+                2.  **Potential Tensions:** Identify 1-2 areas where their stated beliefs, rules, or goals might conflict or be in tension with each other, and frame them as thoughtful questions.
+                3.  **A Question for Deeper Synthesis:** Formulate one final, powerful, open-ended question that will challenge the student to think about their framework in a new way.
+                4.  **Voice and Platform Analysis:** Based on the theoretical framework provided below, analyze the student's "Voice Architecture" and their approach to "Platform Innovation."
+                
+                **Theoretical Framework for Voice and Platform Analysis:**
+                - **Voice:** The capacity to articulate one's Personal Reality Framework. Different "Voice Architectures" exist (e.g., individualistic, collective, scientific, spiritual, artistic).
+                - **Platform:** The institutional and social structures that provide opportunities for a voice to be heard. "Platform Innovation" or "Platform Creation" is when a person builds new structures to amplify voices, rather than just using existing ones.
+                - **Capability Development:** Analyze how the person's actions or framework helps develop the capabilities of themselves or others.
+                
+                **Student's Raw Data:**
+                ${allData}
+                
+                **Conversation Transcript:**
+                ${fullHistoryText}
+                `;
+
+                 try {
+                    const apiUrl = '/.netlify/functions/ai-tutor';
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationHistory: [], prompt: finalPrompt }) // Send empty history, full context is in prompt
+                    });
+                     if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API Error: ${response.status} - ${errorData.error}`);
+                    }
+                    const result = await response.json();
+                     if (!result.candidates || result.candidates.length === 0) {
+                         throw new Error("No response from AI. The content may have been blocked.");
+                    }
+                    const aiText = result.candidates[0].content.parts[0].text;
+                    
+                    finalAnalysisDisplay.textContent = aiText;
+                    finalAnalysisDisplay.classList.remove('hidden');
+
+                } catch (error) {
+                     finalAnalysisDisplay.textContent = `An error occurred: ${error.message}. Please check your connection or contact the administrator.`;
+                     finalAnalysisDisplay.classList.remove('hidden');
+                } finally {
+                    analysisBtnText.classList.remove('hidden');
+                    analysisSpinner.classList.add('hidden');
+                    generateAnalysisBtn.disabled = false;
+                }
+            });
+
+            // --- Download Full PRF ---
+            downloadPrfBtn.addEventListener('click', () => {
+                let fullPrfText = "My Personal Reality Framework\n============================\n\n";
+                CATEGORIES.forEach(key => {
+                    const formattedName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    fullPrfText += `--- ${formattedName} ---\n` + (document.getElementById(`${key}-display`).value || "No data uploaded.") + "\n\n";
+                });
+                
+                if (conversationHistory.length > 0) {
+                    fullPrfText += "============================\n--- GUIDED SYNTHESIS CONVERSATION ---\n";
+                    const cleanHistory = conversationHistory.filter(msg => msg.role === 'user' || msg.role === 'model');
+                    cleanHistory.forEach(msg => {
+                        const sender = msg.role === 'user' ? 'Me' : 'AI Tutor';
+                        fullPrfText += `\n[${sender}]:\n${msg.parts[0].text}\n`;
+                    });
+                     fullPrfText += "\n\n";
+                }
+                
+                if (!finalAnalysisDisplay.classList.contains('hidden')) {
+                    fullPrfText += "============================\n--- FINAL AI ANALYSIS ---\n" + (finalAnalysisDisplay.textContent || "No analysis generated.") + "\n\n";
+                }
+
+                const blob = new Blob([fullPrfText], { type: 'text/plain;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'My-Personal-Reality-Framework.txt';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        });
+    </script>
+</body>
+</html>
+
