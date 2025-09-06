@@ -430,10 +430,12 @@
 
             function addMessage(text, sender) {
                 const messageDiv = document.createElement('div');
+                const role = (sender === 'user') ? 'user' : 'model';
                 messageDiv.className = `chat-message ${sender}-message`;
                 messageDiv.textContent = text;
                 chatHistory.appendChild(messageDiv);
                 chatHistory.scrollTop = chatHistory.scrollHeight;
+                conversationHistory.push({ role, parts: [{ text }] });
             }
             
             function constructPrompt(step, fullHistory) {
@@ -503,7 +505,6 @@
                     
                     thinkingMsg.remove();
                     addMessage(aiText, 'ai');
-                    conversationHistory.push({role: 'model', parts: [{text: aiText}]});
 
                 } catch (error) {
                      thinkingMsg.remove();
@@ -525,7 +526,6 @@
                 if (!userText) return;
                 
                 addMessage(userText, 'user');
-                conversationHistory.push({role: 'user', parts: [{text: userText}]});
                 chatInput.value = '';
                 currentStep++;
                 getAiResponse();
