@@ -1,0 +1,6 @@
+# This is the configuration file ("map") for Netlify.
+# It tells Netlify how to build and serve the site.
+
+[build]
+  # This line tells Netlify where to find our "mailroom" function.
+  functions = "netlify/functions"
