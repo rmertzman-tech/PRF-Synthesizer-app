@@ -1,0 +1,14 @@
+{
+  "name": "prf-synthesizer-serverless",
+  "version": "1.0.0",
+  "description": "Serverless function for the PRF Synthesizer AI Tutor.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-fetch": "^2.6.1"
+  }
+}
