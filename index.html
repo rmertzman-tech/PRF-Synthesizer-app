@@ -438,7 +438,7 @@
                 conversationHistory.push({ role, parts: [{ text }] });
             }
             
-            function constructPrompt(step, fullHistory) {
+            function constructPrompt(step, fullHistoryText) {
                 const currentModule = synthesisSteps[step];
                 const previousModule = synthesisSteps[step - 1];
                 let allData = '';
@@ -457,7 +457,7 @@
                      return `You are an insightful and supportive philosophy tutor continuing a guided synthesis conversation with a student about their Personal Reality Framework (PRF).
                     
                     **Conversation History So Far:**
-                    ${fullHistory}
+                    ${fullHistoryText}
                     
                     **Your Task:** Your next step is to guide the student to connect their reflections on **${previousModule.replace(/_/g, ' ')}** with their reflections on **${currentModule.replace(/_/g, ' ')}**.
                     
@@ -482,11 +482,17 @@
                 chatHistory.scrollTop = chatHistory.scrollHeight;
 
                 const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
-                const prompt = constructPrompt(currentStep, fullHistoryText);
+                const systemPrompt = constructPrompt(currentStep, fullHistoryText);
                 
+                // The conversation history sent to the API is now managed correctly.
+                // The last message is always from the 'user'.
                 const conversationPayload = {
-                    contents: [...conversationHistory, { role: 'user', parts: [{ text: "SYSTEM INSTRUCTION: " + prompt }] }]
+                    contents: [...conversationHistory.slice(0, -1), { role: 'user', parts: [{ text: conversationHistory[conversationHistory.length - 1].parts[0].text + "\n\n---SYSTEM INSTRUCTION---\n" + systemPrompt }] }]
                 };
+                if (currentStep === 1) { // First turn
+                    conversationPayload.contents = [{ role: 'user', parts: [{ text: systemPrompt }] }];
+                }
+
 
                 const apiUrl = '/.netlify/functions/ai-tutor';
 
@@ -498,7 +504,7 @@
                     });
                     if (!response.ok) {
                         const errorData = await response.json();
-                        throw new Error(`API Error: ${response.status} - ${errorData.error}`);
+                        throw new Error(`API Error: ${response.status} - ${errorData.error || 'Unknown error'}`);
                     }
                     const result = await response.json();
                     if (!result.candidates || result.candidates.length === 0) {
@@ -546,6 +552,8 @@
                 const hasData = CATEGORIES.some(key => document.getElementById(`${key}-display`).value.trim() !== '');
                 if (hasData) {
                     currentStep = 1; // Ready for first AI question
+                    addMessage("Placeholder for user to start", 'user'); // Add a dummy user message to start the alternating sequence
+                    conversationHistory.pop(); // Immediately remove it, we just need the array structure right
                     getAiResponse();
                 } else {
                     addMessage("Please load or upload some data from your explorers before we can begin.", 'ai');
