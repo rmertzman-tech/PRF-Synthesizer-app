@@ -481,17 +481,20 @@
                 chatHistory.appendChild(thinkingMsg);
                 chatHistory.scrollTop = chatHistory.scrollHeight;
 
-                const fullHistoryText = conversationHistory.map(msg => `[${msg.role === 'user' ? 'Student' : 'Tutor'}]: ${msg.parts[0].text}`).join('\n');
+                const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
                 const prompt = constructPrompt(currentStep, fullHistoryText);
                 
-                // This will be the new URL for your serverless function
+                const conversationPayload = {
+                    contents: [...conversationHistory, { role: 'user', parts: [{ text: "SYSTEM INSTRUCTION: " + prompt }] }]
+                };
+
                 const apiUrl = '/.netlify/functions/ai-tutor';
 
                 try {
                     const response = await fetch(apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ conversationHistory, prompt })
+                        body: JSON.stringify({ conversationPayload })
                     });
                     if (!response.ok) {
                         const errorData = await response.json();
@@ -568,7 +571,7 @@
                     allData += `--- ${formattedName} ---\n${document.getElementById(`${key}-display`).value || 'No data provided.'}\n\n`;
                 });
                 
-                const fullHistoryText = conversationHistory.map(msg => `[${msg.role === 'user' ? 'Student' : 'Tutor'}]: ${msg.parts[0].text}`).join('\n');
+                const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
 
 
                 const finalPrompt = `You are a philosophy tutor specializing in a framework that analyzes personal reality through Beliefs, Rules, Ontology, Authenticity, Assembly History, and Future Pull. You have just completed a guided synthesis conversation with a student.
@@ -592,13 +595,17 @@
                 **Conversation Transcript:**
                 ${fullHistoryText}
                 `;
+                
+                const conversationPayload = {
+                    contents: [{ role: 'user', parts: [{ text: finalPrompt }] }]
+                };
 
                  try {
                     const apiUrl = '/.netlify/functions/ai-tutor';
                     const response = await fetch(apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ conversationHistory: [], prompt: finalPrompt }) // Send empty history, full context is in prompt
+                        body: JSON.stringify({ conversationPayload }) 
                     });
                      if (!response.ok) {
                         const errorData = await response.json();
