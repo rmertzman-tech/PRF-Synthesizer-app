@@ -484,15 +484,18 @@
                 const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
                 const systemPrompt = constructPrompt(currentStep, fullHistoryText);
                 
-                // The conversation history sent to the API is now managed correctly.
-                // The last message is always from the 'user'.
-                const conversationPayload = {
-                    contents: [...conversationHistory.slice(0, -1), { role: 'user', parts: [{ text: conversationHistory[conversationHistory.length - 1].parts[0].text + "\n\n---SYSTEM INSTRUCTION---\n" + systemPrompt }] }]
-                };
-                if (currentStep === 1) { // First turn
-                    conversationPayload.contents = [{ role: 'user', parts: [{ text: systemPrompt }] }];
+                // CORRECTED LOGIC: Create the payload based on whose turn it is.
+                let conversationPayload;
+                if (currentStep === 1) { // This is the first turn. History is empty.
+                    conversationPayload = {
+                        contents: [{ role: 'user', parts: [{ text: systemPrompt }] }]
+                    };
+                } else { // This is a subsequent turn. History has messages.
+                    conversationPayload = {
+                         // Send the existing, alternating history.
+                        contents: [...conversationHistory, { role: 'user', parts: [{ text: "SYSTEM INSTRUCTION: " + systemPrompt }] }]
+                    };
                 }
-
 
                 const apiUrl = '/.netlify/functions/ai-tutor';
 
@@ -552,8 +555,6 @@
                 const hasData = CATEGORIES.some(key => document.getElementById(`${key}-display`).value.trim() !== '');
                 if (hasData) {
                     currentStep = 1; // Ready for first AI question
-                    addMessage("Placeholder for user to start", 'user'); // Add a dummy user message to start the alternating sequence
-                    conversationHistory.pop(); // Immediately remove it, we just need the array structure right
                     getAiResponse();
                 } else {
                     addMessage("Please load or upload some data from your explorers before we can begin.", 'ai');
