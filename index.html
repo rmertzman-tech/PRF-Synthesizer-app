@@ -161,7 +161,6 @@
 
     <div id="app" class="w-full max-w-7xl mx-auto">
         
-        <!-- Start Screen -->
         <div id="start-screen" class="screen text-center max-w-2xl mx-auto">
              <div class="card p-8 md:p-12">
                 <h1 class="text-4xl font-bold">Personal Reality Framework (PRF) Synthesizer</h1>
@@ -173,7 +172,6 @@
             </div>
         </div>
 
-        <!-- Explanation Screen -->
         <div id="explanation-screen" class="screen hidden text-left max-w-3xl mx-auto">
             <div class="card p-8 md:p-12">
                 <h2 class="text-3xl font-bold text-center mb-6">Synthesize Your Framework</h2>
@@ -207,26 +205,21 @@
             </div>
         </div>
 
-        <!-- Main App Workspace -->
         <div id="main-app" class="hidden">
             <div class="text-left mb-6">
                  <button id="back-to-start-btn" class="font-semibold text-indigo-600 hover:text-indigo-800">← Back to Start</button>
             </div>
-            <!-- Header -->
             <div class="text-center mb-8">
                 <h1 id="main-title" class="text-4xl font-bold">Personal Reality Framework (PRF) Synthesizer</h1>
                 <p class="text-gray-600 mt-2">Import your saved summaries from the explorers to begin.</p>
             </div>
 
-            <!-- Demo Status Banner -->
             <div id="demo-status-banner" class="hidden card bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 text-center mb-6">
                 <p>You are currently viewing the interactive demo for: <strong id="demo-name-display"></strong>. Any edits or new file uploads will clear this demo.</p>
             </div>
 
-            <!-- Main Workspace -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
-                <!-- Left Column: File Uploads -->
                 <div class="lg:col-span-1 space-y-6">
                     <div class="card p-6">
                         <h2 class="text-xl font-bold mb-4">1. Import Your Data</h2>
@@ -243,21 +236,18 @@
                     </div>
                 </div>
 
-                <!-- Right Column: Synthesis & Analysis -->
                 <div class="lg:col-span-2 space-y-6">
                     <div class="card p-6">
                         <h2 class="text-xl font-bold mb-4">2. Review & Edit Your Data</h2>
                         <div id="review-grid" class="review-grid p-2 bg-gray-50 rounded-lg">
-                             <!-- Text areas will be dynamically created here -->
-                        </div>
+                             </div>
                     </div>
                     <div class="card p-6">
                         <h2 class="text-xl font-bold mb-4">3. Guided Synthesis</h2>
                         
                         <div id="chat-container" class="w-full h-96 flex flex-col border bg-white rounded-lg p-4">
                             <div id="chat-history" class="flex-1 overflow-y-auto mb-4 flex flex-col">
-                                <!-- Chat messages will appear here -->
-                            </div>
+                                </div>
                             <div id="chat-input-area" class="flex items-center gap-2">
                                 <textarea id="chat-input" class="w-full border border-gray-300 rounded-lg p-2 resize-none" placeholder="Type your response..." rows="2" disabled></textarea>
                                 <button id="chat-send-btn" class="btn btn-primary px-6 py-2 rounded-lg font-semibold" disabled>Send</button>
@@ -438,7 +428,7 @@
                 conversationHistory.push({ role, parts: [{ text }] });
             }
             
-            function constructPrompt(step) {
+            function constructPrompt(step, fullHistoryText) {
                 const currentModule = synthesisSteps[step];
                 const previousModule = synthesisSteps[step - 1];
                 let allData = '';
@@ -456,6 +446,9 @@
                 } else {
                      return `You are an insightful and supportive philosophy tutor continuing a guided synthesis conversation with a student about their Personal Reality Framework (PRF).
                     
+                    **Conversation History So Far:**
+                    ${fullHistoryText}
+                    
                     **Your Task:** Your next step is to guide the student to connect their reflections on **${previousModule.replace(/_/g, ' ')}** with their reflections on **${currentModule.replace(/_/g, ' ')}**.
                     
                     Please generate a response that does the following:
@@ -463,7 +456,9 @@
                     2.  **Synthesize and Connect:** Analyze the student's full data, find an interesting connection or a potential tension between the '${previousModule}' and '${currentModule}' sections.
                     3.  **Ask a Probing Question:** Formulate an insightful, open-ended question that encourages the student to explore this connection or tension. Your question should prompt critical thinking, not a simple yes/no answer.
                     
-                    Keep your tone encouraging and conversational.`;
+                    Keep your tone encouraging and conversational.
+                    
+                    Here is all of the student's data for your reference:\n${allData}`;
                 }
             }
             
@@ -475,18 +470,18 @@
                 thinkingMsg.innerHTML = '<div class="spinner"></div>';
                 chatHistory.appendChild(thinkingMsg);
                 chatHistory.scrollTop = chatHistory.scrollHeight;
-                
-                const systemPrompt = constructPrompt(currentStep);
+
+                const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
+                const systemPrompt = constructPrompt(currentStep, fullHistoryText);
                 
                 let conversationPayload;
                 if (currentStep === 1) { 
                     conversationPayload = {
                         contents: [{ role: 'user', parts: [{ text: systemPrompt }] }]
                     };
-                } else {
+                } else { 
                     conversationPayload = {
-                        contents: conversationHistory, 
-                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                        contents: [...conversationHistory.slice(0, -1), { role: 'user', parts: [{ text: conversationHistory[conversationHistory.length - 1].parts[0].text + "\n\n---SYSTEM INSTRUCTION---\n" + systemPrompt }] }]
                     };
                 }
 
@@ -498,11 +493,13 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ conversationPayload })
                     });
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(`API Error: ${response.status} - ${errorData.error || 'Unknown error'}`);
-                    }
+                    
                     const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || `HTTP error! status: ${response.status}`);
+                    }
+                    
                     if (!result.candidates || result.candidates.length === 0) {
                          throw new Error("No response from AI. The content may have been blocked.");
                     }
@@ -544,7 +541,6 @@
                 finalAnalysisDisplay.classList.add('hidden');
                 finalAnalysisDisplay.textContent = '';
 
-
                 const hasData = CATEGORIES.some(key => document.getElementById(`${key}-display`).value.trim() !== '');
                 if (hasData) {
                     currentStep = 1; 
@@ -574,7 +570,6 @@
                 });
                 
                 const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
-
 
                 const finalPrompt = `You are a philosophy tutor specializing in a framework that analyzes personal reality through Beliefs, Rules, Ontology, Authenticity, Assembly History, and Future Pull. You have just completed a guided synthesis conversation with a student.
                 
@@ -609,12 +604,14 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ conversationPayload }) 
                     });
-                     if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(`API Error: ${response.status} - ${errorData.error}`);
-                    }
+                    
                     const result = await response.json();
-                     if (!result.candidates || result.candidates.length === 0) {
+
+                    if (!response.ok) {
+                       throw new Error(result.error || `HTTP error! status: ${response.status}`);
+                    }
+
+                    if (!result.candidates || result.candidates.length === 0) {
                          throw new Error("No response from AI. The content may have been blocked.");
                     }
                     const aiText = result.candidates[0].content.parts[0].text;
@@ -627,7 +624,7 @@
                      finalAnalysisDisplay.classList.remove('hidden');
                 } finally {
                     analysisBtnText.classList.remove('hidden');
-                    analysisSpinner.classList.add('hidden');
+                    analysisSpinner.add('hidden');
                     generateAnalysisBtn.disabled = false;
                 }
             });
@@ -666,4 +663,3 @@
     </script>
 </body>
 </html>
-
