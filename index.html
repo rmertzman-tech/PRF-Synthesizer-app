@@ -438,7 +438,7 @@
                 conversationHistory.push({ role, parts: [{ text }] });
             }
             
-            function constructPrompt(step, fullHistoryText) {
+            function constructPrompt(step) {
                 const currentModule = synthesisSteps[step];
                 const previousModule = synthesisSteps[step - 1];
                 let allData = '';
@@ -456,9 +456,6 @@
                 } else {
                      return `You are an insightful and supportive philosophy tutor continuing a guided synthesis conversation with a student about their Personal Reality Framework (PRF).
                     
-                    **Conversation History So Far:**
-                    ${fullHistoryText}
-                    
                     **Your Task:** Your next step is to guide the student to connect their reflections on **${previousModule.replace(/_/g, ' ')}** with their reflections on **${currentModule.replace(/_/g, ' ')}**.
                     
                     Please generate a response that does the following:
@@ -466,9 +463,7 @@
                     2.  **Synthesize and Connect:** Analyze the student's full data, find an interesting connection or a potential tension between the '${previousModule}' and '${currentModule}' sections.
                     3.  **Ask a Probing Question:** Formulate an insightful, open-ended question that encourages the student to explore this connection or tension. Your question should prompt critical thinking, not a simple yes/no answer.
                     
-                    Keep your tone encouraging and conversational.
-                    
-                    Here is all of the student's data for your reference:\n${allData}`;
+                    Keep your tone encouraging and conversational.`;
                 }
             }
             
@@ -480,19 +475,18 @@
                 thinkingMsg.innerHTML = '<div class="spinner"></div>';
                 chatHistory.appendChild(thinkingMsg);
                 chatHistory.scrollTop = chatHistory.scrollHeight;
-
-                const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
-                const systemPrompt = constructPrompt(currentStep, fullHistoryText);
                 
-                // CORRECTED LOGIC: Create the payload with the correct alternating structure.
+                const systemPrompt = constructPrompt(currentStep);
+                
                 let conversationPayload;
-                if (currentStep === 1) { // This is the first turn. History is empty.
+                if (currentStep === 1) { 
                     conversationPayload = {
                         contents: [{ role: 'user', parts: [{ text: systemPrompt }] }]
                     };
-                } else { // This is a subsequent turn. History has messages.
+                } else {
                     conversationPayload = {
-                        contents: [...conversationHistory.slice(0, -1), { role: 'user', parts: [{ text: conversationHistory[conversationHistory.length - 1].parts[0].text + "\n\n---SYSTEM INSTRUCTION---\n" + systemPrompt }] }]
+                        contents: conversationHistory, 
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
                     };
                 }
 
