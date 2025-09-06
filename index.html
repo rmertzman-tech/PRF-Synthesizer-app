@@ -484,7 +484,7 @@
                 const fullHistoryText = conversationHistory.map(msg => `[${msg.role}]: ${msg.parts[0].text}`).join('\n');
                 const systemPrompt = constructPrompt(currentStep, fullHistoryText);
                 
-                // CORRECTED LOGIC: Create the payload based on whose turn it is.
+                // CORRECTED LOGIC: Create the payload with the correct alternating structure.
                 let conversationPayload;
                 if (currentStep === 1) { // This is the first turn. History is empty.
                     conversationPayload = {
@@ -492,8 +492,7 @@
                     };
                 } else { // This is a subsequent turn. History has messages.
                     conversationPayload = {
-                         // Send the existing, alternating history.
-                        contents: [...conversationHistory, { role: 'user', parts: [{ text: "SYSTEM INSTRUCTION: " + systemPrompt }] }]
+                        contents: [...conversationHistory.slice(0, -1), { role: 'user', parts: [{ text: conversationHistory[conversationHistory.length - 1].parts[0].text + "\n\n---SYSTEM INSTRUCTION---\n" + systemPrompt }] }]
                     };
                 }
 
@@ -554,7 +553,7 @@
 
                 const hasData = CATEGORIES.some(key => document.getElementById(`${key}-display`).value.trim() !== '');
                 if (hasData) {
-                    currentStep = 1; // Ready for first AI question
+                    currentStep = 1; 
                     getAiResponse();
                 } else {
                     addMessage("Please load or upload some data from your explorers before we can begin.", 'ai');
