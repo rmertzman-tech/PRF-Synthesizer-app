@@ -1,50 +1,53 @@
-// This is the updated code for our secure "serverless mailroom."
-// It now acts as a simple, secure proxy for the AI.
+// File: netlify/functions/ai-tutor.js
+// VERSION WITH DEBUG LOGGING
 
-// The 'node-fetch' library is needed to make network requests from the server.
 const fetch = require('node-fetch');
 
 exports.handler = async function(event) {
-    // This function runs every time a student makes a request from the app.
-    
-    // 1. Get the complete conversation payload directly from the request body.
-    // The main app is now responsible for constructing the entire payload.
+  console.log("--- ai-tutor function started. ---"); // Log that the function is running
+
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method Not Allowed' };
+  }
+
+  // --- Step 1: Get the API Key and LOG what we find ---
+  const apiKey = process.env.GOOGLE_API_KEY;
+  
+  // THIS IS THE MOST IMPORTANT LOG: It tells us if the key was found.
+  console.log("Is GOOGLE_API_KEY present in environment?", apiKey ? "Yes" : "No");
+
+  // If the key exists, log the first 5 characters to confirm it's not empty.
+  if (apiKey) {
+    console.log("API Key starts with:", apiKey.substring(0, 5));
+  }
+  
+  if (!apiKey) {
+    console.error("CRITICAL: API key is missing from environment variables.");
+    return { statusCode: 500, body: JSON.stringify({ error: 'API key is not configured on the server.' }) };
+  }
+
+  try {
     const { conversationPayload } = JSON.parse(event.body);
-
-    // 2. Access YOUR secret API key from Netlify's environment variables.
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) {
-        // If the key is missing, return a server error.
-        return { statusCode: 500, body: JSON.stringify({ error: 'API key is not configured on the server.' }) };
-    }
-
-    // 3. Prepare the request to send to the Google AI.
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
 
-    try {
-        // 4. Send the exact payload from the app directly to Google's AI.
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(conversationPayload) 
-        });
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(conversationPayload) 
+    });
 
-        // If Google's API returns an error, log it and pass it along.
-        if (!response.ok) {
-            const errorBody = await response.json();
-            console.error('Google AI API Error:', errorBody);
-            return { statusCode: response.status, body: JSON.stringify({ error: 'An error occurred with the AI service.', details: errorBody }) };
-        }
+    const data = await response.json();
 
-        const data = await response.json();
-
-        // 5. Return the AI's successful response back to the student's browser.
-        return { statusCode: 200, body: JSON.stringify(data) };
-
-    } catch (error) {
-        // Handle any other unexpected errors during the process.
-        console.error('Serverless function error:', error);
-        return { statusCode: 500, body: JSON.stringify({ error: 'An internal server error occurred.' }) };
+    if (!response.ok) {
+      console.error('Error response from Google AI:', data);
+      return { statusCode: response.status, body: JSON.stringify(data) };
     }
-};
 
+    console.log("--- Successfully received response from Google. ---");
+    return { statusCode: 200, body: JSON.stringify(data) };
+
+  } catch (error) {
+    console.error('Catastrophic error in function execution:', error);
+    return { statusCode: 500, body: JSON.stringify({ error: 'An internal server error occurred.' }) };
+  }
+};
